@@ -1,0 +1,24 @@
+{
+  "skills": [
+    {
+      "name": "skills-playbook",
+      "path": ".agents/skills/skills-playbook/SKILL.md",
+      "description": "Use when creating or refining project skills and deciding scope/ownership."
+    },
+    {
+      "name": "gitlab-pipeline-monitoring",
+      "path": ".agents/skills/gitlab-pipeline-monitoring/SKILL.md",
+      "description": "Use when implementing, debugging, or validating GitLab API polling and pipeline status mapping."
+    },
+    {
+      "name": "tray-dashboard-ux",
+      "path": ".agents/skills/tray-dashboard-ux/SKILL.md",
+      "description": "Use when changing tray behavior, aggregated/per-project traffic lights, and dashboard data presentation."
+    },
+    {
+      "name": "electron-packaging",
+      "path": ".agents/skills/electron-packaging/SKILL.md",
+      "description": "Use when working on cross-platform builds, installers, signing prerequisites, and release artifacts."
+    }
+  ]
+}

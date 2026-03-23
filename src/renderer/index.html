@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitLab Status Monitor</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <h1>GitLab Status Monitor</h1>
+          <p class="subhead">Watch one or multiple projects with traffic-light pipeline status.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="refresh-btn">Refresh</button>
+        </div>
+      </header>
+
+      <section class="card grid-two">
+        <div>
+          <h2>Connection</h2>
+          <label for="token">Personal Access Token (optional if env TOKEN/GITLAB_TOKEN is set)</label>
+          <input id="token" type="password" placeholder="glpat-..." />
+          <button id="save-token-btn">Save Token</button>
+
+          <label for="api-base">GitLab API Base URL</label>
+          <input id="api-base" type="text" placeholder="https://gitlab.com/api/v4" />
+          <button id="save-api-btn">Save API Base</button>
+        </div>
+        <div>
+          <h2>Polling</h2>
+          <label for="poll-interval">Poll interval (seconds, min 15)</label>
+          <input id="poll-interval" type="number" min="15" step="5" value="60" />
+          <button id="save-poll-btn">Save Poll Interval</button>
+
+          <div class="status-panel">
+            <div>
+              <span class="label">Token active:</span>
+              <span id="token-active">No</span>
+            </div>
+            <div>
+              <span class="label">Token source:</span>
+              <span id="token-source">none</span>
+            </div>
+            <div>
+              <span class="label">Env TOKEN found:</span>
+              <span id="env-token-found">No</span>
+            </div>
+            <div>
+              <span class="label">Last update:</span>
+              <span id="last-update">-</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Monitored Projects</h2>
+        <form id="add-project-form" class="inline-form">
+          <input id="project-id" type="text" placeholder="Project ID or group/project" required />
+          <button id="load-branches-btn" type="button">Load Branches</button>
+          <select id="project-branches" multiple size="5" aria-label="Branches to monitor"></select>
+          <button type="submit">Add / Merge</button>
+        </form>
+        <p class="subnote">Tip: select multiple branches with Cmd/Ctrl + click (or Shift + click range).</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Project Name</th>
+                <th>Project ID</th>
+                <th>Branches</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="projects-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Current Pipeline Status</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Light</th>
+                <th>Project Name</th>
+                <th>Project ID</th>
+                <th>Branch</th>
+                <th>Pipeline</th>
+                <th>Updated</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="status-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
