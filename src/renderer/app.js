@@ -798,21 +798,30 @@ async function wireProjectBranchSelectors(projects) {
   const selectors = elements.projectsTable.querySelectorAll("select[data-project-branch-select]");
 
   for (const select of selectors) {
-    const projectId = String(select.dataset.projectBranchSelect || "").trim();
+    const projectId = String(select.dataset.projectId || "").trim();
+    const currentBranch = String(select.dataset.currentBranch || "").trim();
+    if (!projectId) {
+      continue;
+    }
+
     const project = projects.find((item) => item.id === projectId);
-    const selectedBranch = project && project.branches && project.branches.length > 0 ? project.branches[0] : "main";
+    const selectedBranch = currentBranch || (project && project.branches && project.branches.length > 0 ? project.branches[0] : "main");
 
     await loadBranchesForProject(projectId, [selectedBranch], select, false);
 
     select.addEventListener("change", async () => {
-      const branch = String(select.value || "").trim();
-      if (!branch) {
+      const nextBranch = String(select.value || "").trim();
+      if (!nextBranch) {
         return;
       }
 
+      const existingBranches = project && Array.isArray(project.branches) ? project.branches.slice() : [selectedBranch];
+      const replacedBranches = existingBranches.map((branch) => (branch === selectedBranch ? nextBranch : branch));
+      const unique = Array.from(new Set(replacedBranches.filter(Boolean)));
+
       select.disabled = true;
       try {
-        await window.monitorApi.setProjectBranches({ id: projectId, branches: [branch] });
+        await window.monitorApi.setProjectBranches({ id: projectId, branches: unique.length > 0 ? unique : [nextBranch] });
         await refreshState();
       } finally {
         select.disabled = false;
@@ -866,28 +875,46 @@ function renderProjects(projects) {
   }
 
   for (const project of projects) {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td class="break">${projectDisplayName(project)}</td>
-      <td class="break">${project.id}</td>
-      <td class="break">${project.branches.join(", ")}</td>
-      <td>
-        <div class="action-controls">
-          <select data-project-branch-select="${project.id}" aria-label="Choose branch for ${project.id}">
-            <option>Loading...</option>
-          </select>
-          <button data-remove-project="${project.id}">Remove</button>
-        </div>
-      </td>
-    `;
-    elements.projectsTable.appendChild(row);
+    const branches = Array.isArray(project.branches) && project.branches.length > 0 ? project.branches : ["main"];
+    for (const branch of branches) {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td class="break">${projectDisplayName(project)}</td>
+        <td class="break">${project.id}</td>
+        <td class="break">${branch}</td>
+        <td>
+          <div class="action-controls">
+            <select data-project-branch-select="1" data-project-id="${project.id}" data-current-branch="${branch}" aria-label="Choose replacement branch for ${project.id}">
+              <option>Loading...</option>
+            </select>
+            <button data-remove-project-branch="1" data-project-id="${project.id}" data-current-branch="${branch}">Remove</button>
+          </div>
+        </td>
+      `;
+      elements.projectsTable.appendChild(row);
+    }
   }
 
   wireProjectBranchSelectors(projects);
 
-  for (const button of elements.projectsTable.querySelectorAll("button[data-remove-project]")) {
+  for (const button of elements.projectsTable.querySelectorAll("button[data-remove-project-branch]")) {
     button.addEventListener("click", async () => {
-      await window.monitorApi.removeProject(button.dataset.removeProject);
+      const projectId = String(button.dataset.projectId || "").trim();
+      const currentBranch = String(button.dataset.currentBranch || "").trim();
+      if (!projectId || !currentBranch) {
+        return;
+      }
+
+      const project = (appState && appState.config && appState.config.projects || []).find((item) => item.id === projectId);
+      const existingBranches = project && Array.isArray(project.branches) ? project.branches.slice() : [];
+      const remaining = existingBranches.filter((branch) => branch !== currentBranch);
+
+      if (remaining.length === 0) {
+        await window.monitorApi.removeProject(projectId);
+      } else {
+        await window.monitorApi.setProjectBranches({ id: projectId, branches: remaining });
+      }
+
       await refreshState();
     });
   }
@@ -999,7 +1026,7 @@ elements.addProjectForm.addEventListener("submit", async (event) => {
 
   elements.projectIdInput.value = "";
   elements.projectBranchesInput.innerHTML = "";
-  elements.submitProjectBtn.textContent = "Add / Merge";
+  elements.submitProjectBtn.textContent = "Add";
   await refreshState();
 });
 

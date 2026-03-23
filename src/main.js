@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require("electron");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require("electron");
 const { loadConfig, saveConfig, normalizeConfig, normalizeApiBaseUrl, resolveTokenInfo } = require("./lib/config");
 const { fetchLatestPipeline, fetchProjectBranches, fetchProjectDetails, fetchCommitGraph } = require("./lib/gitlab");
 const { aggregateLight, mapPipelineStatusToLight, lightEmoji, isOngoingPipeline, parseBranchesInput } = require("./lib/status");
@@ -11,6 +11,19 @@ let statusEntries = [];
 let pollingTimer;
 let isQuitting = false;
 let trayReady = false;
+
+function setDockVisible(visible) {
+  if (process.platform !== "darwin" || !app.dock) {
+    return;
+  }
+
+  if (visible) {
+    app.dock.show();
+    return;
+  }
+
+  app.dock.hide();
+}
 
 function supportsAutoLaunch() {
   return process.platform === "darwin" || process.platform === "win32";
@@ -53,6 +66,22 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const currentUrl = mainWindow.webContents.getURL();
+    if (url === currentUrl) {
+      return;
+    }
+
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+
   mainWindow.on("close", (event) => {
     if (isQuitting) {
       return;
@@ -64,6 +93,7 @@ function createWindow() {
 
     event.preventDefault();
     mainWindow.hide();
+    setDockVisible(false);
   });
 }
 
@@ -85,6 +115,7 @@ function openDashboard() {
   if (!mainWindow) {
     return;
   }
+  setDockVisible(true);
   mainWindow.show();
   mainWindow.focus();
 }
@@ -134,9 +165,16 @@ function rebuildTrayMenu() {
       .forEach((entry) => {
         const light = mapPipelineStatusToLight(entry.pipelineStatus);
         const ongoingMarker = entry.isOngoing ? " (ongoing)" : "";
+        const pipelineUrl = String(entry.pipelineWebUrl || "").trim();
         menuItems.push({
           label: `${lightEmoji(light)} ${projectDisplay(entry.projectId, entry.projectName)} [${entry.branchDisplay || entry.branch}] - ${entry.pipelineStatus || "unknown"}${ongoingMarker}`,
-          enabled: false
+          enabled: Boolean(pipelineUrl),
+          click: () => {
+            if (!pipelineUrl) {
+              return;
+            }
+            shell.openExternal(pipelineUrl);
+          }
         });
       });
   }
@@ -450,7 +488,7 @@ async function bootstrap() {
 
   try {
     tray = new Tray(createCircleIcon("gray"));
-    tray.on("click", () => openDashboard());
+    tray.on("click", () => tray.popUpContextMenu());
     trayReady = true;
   } catch (error) {
     trayReady = false;
