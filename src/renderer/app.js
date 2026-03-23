@@ -1035,8 +1035,13 @@ elements.loadTreeBtn.addEventListener("click", async () => {
     let filteredBranches = allBranches;
 
     if (selectedBranch) {
-      const family = selectedBranch.split("/")[0];
-      filteredBranches = allBranches.filter((branch) => branch === selectedBranch || branch.startsWith(`${family}/`));
+      if (selectedBranch.includes("/")) {
+        const family = selectedBranch.split("/")[0];
+        filteredBranches = allBranches.filter((branch) => branch === selectedBranch || branch.startsWith(`${family}/`));
+      } else {
+        filteredBranches = allBranches;
+      }
+
       if (filteredBranches.length === 0) {
         filteredBranches = [selectedBranch];
       }
