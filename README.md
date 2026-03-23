@@ -86,6 +86,15 @@ Helper scripts:
 
 Note: helper scripts build installers for the current host OS. To produce all platform installers, run in CI with one runner per OS (macOS, Windows, Linux).
 
+## Automated Releases
+
+- GitHub Actions workflow: `.github/workflows/release.yml`
+- On every push to `main`, it:
+  - runs tests
+  - builds platform installers on Linux/Windows/macOS
+  - creates a prerelease with build artifacts
+- The workflow uses `secrets.GITHUB_TOKEN` automatically.
+
 ## Troubleshooting
 
 - If packaging fails with ASAR/offset errors on macOS external volumes, remove AppleDouble files and retry:
