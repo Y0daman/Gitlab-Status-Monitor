@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Tray application for monitoring GitLab pipeline status with traffic lights",
   "main": "src/main.js",
-  "author": "",
+  "author": {
+    "name": "Jimmy Ahs",
+    "email": "jimmyahs@gmail.com"
+  },
   "license": "MIT",
   "scripts": {
     "start": "electron .",
@@ -51,6 +54,7 @@
       ]
     },
     "linux": {
+      "maintainer": "Jimmy Ahs <jimmyahs@gmail.com>",
       "target": [
         {
           "target": "AppImage",
