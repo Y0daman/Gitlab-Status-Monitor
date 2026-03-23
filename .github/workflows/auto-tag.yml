@@ -1,0 +1,50 @@
+name: Auto Tag Main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create and Push Next Tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create next semantic tag
+        id: next_tag
+        shell: bash
+        run: |
+          git fetch --tags --force
+
+          if git tag --points-at HEAD | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Current commit already has a semantic tag. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LATEST=$(git tag --list | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -n 1)
+          if [[ -z "$LATEST" ]]; then
+            LATEST="0.0.0"
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST"
+          NEXT_TAG="${MAJOR}.${MINOR}.$((PATCH + 1))"
+
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Report created tag
+        if: steps.next_tag.outputs.skip == 'false'
+        run: echo "Created and pushed tag ${{ steps.next_tag.outputs.tag }}"
