@@ -6,6 +6,7 @@ test("normalizeConfig keeps defaults", () => {
   const cfg = normalizeConfig({});
   assert.equal(cfg.pollIntervalSec, DEFAULT_CONFIG.pollIntervalSec);
   assert.equal(cfg.gitlab.apiBaseUrl, DEFAULT_CONFIG.gitlab.apiBaseUrl);
+  assert.equal(cfg.ui.launchOnStartup, false);
   assert.deepEqual(cfg.projects, []);
 });
 

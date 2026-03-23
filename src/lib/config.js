@@ -9,7 +9,8 @@ const DEFAULT_CONFIG = {
     token: ""
   },
   ui: {
-    expandedTray: false
+    expandedTray: false,
+    launchOnStartup: false
   },
   projects: []
 };

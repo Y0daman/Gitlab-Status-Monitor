@@ -1,6 +1,6 @@
 {
   "name": "gitlab-status-monitor",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "description": "Tray application for monitoring GitLab pipeline status with traffic lights",
   "main": "src/main.js",
   "author": {
@@ -12,10 +12,11 @@
     "start": "electron .",
     "dev": "electron .",
     "test": "node --test test/config.test.js test/status.test.js",
-    "build": "electron-builder --publish never",
-    "build:mac": "electron-builder --mac dmg --publish never",
-    "build:win": "electron-builder --win nsis --publish never",
-    "build:linux": "electron-builder --linux AppImage deb --publish never"
+    "bump:build-version": "npm version patch --no-git-tag-version",
+    "build": "npm run bump:build-version && electron-builder --publish never",
+    "build:mac": "npm run bump:build-version && electron-builder --mac dmg pkg --publish never",
+    "build:win": "npm run bump:build-version && electron-builder --win nsis --publish never",
+    "build:linux": "npm run bump:build-version && electron-builder --linux AppImage deb --publish never"
   },
   "devDependencies": {
     "electron": "^31.2.0",
@@ -36,6 +37,13 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "pkg",
           "arch": [
             "x64",
             "arm64"

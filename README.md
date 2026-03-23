@@ -21,15 +21,30 @@ It monitors one or multiple GitLab projects and branches, then displays a traffi
 - Supports add/update/remove for monitored projects.
 - Supports branch selection from dropdown menus loaded directly from GitLab.
 - Supports monitoring the same project on multiple branches at the same time.
+- Supports monitoring `latest` pipeline (across all branches) per project.
+- Includes per-project branch dropdown in the list to immediately switch monitored branch.
+- Includes startup option to auto-launch with OS login in packaged apps (macOS/Windows).
+- Includes branch visualization tools: hierarchical branch tree and commit graph with branch/merge paths.
+- Repository visualizations are separated into tabs: `Branch Tree` and `Commit Graph`.
+- Repository Views use one shared project selector and color-code branch families for faster branching overview.
+- In Repository Views you can choose the branch context (defaults to `main` or `master` when available) for graph/history loading.
+- Commit Graph includes `Copy SVG` and `Download SVG` to export the exact rendered graph for troubleshooting.
+- Dashboard is split into app tabs: `Main` (status and branch switching), `Configuration`, and `Repository Views`.
+- Monitored project management is in `Configuration`; `Main` focuses on live status and direct branch switching from the status table.
 - Supports a saved token and environment fallback (`TOKEN` or `GITLAB_TOKEN`) and displays token source state.
 
 ## Tech stack
 
 - **Electron + Node.js** for cross-platform tray and desktop packaging.
 - **Electron Builder** for installers:
-  - macOS: DMG
+  - macOS: DMG + PKG
   - Windows: NSIS
   - Linux: AppImage + DEB
+
+Installer behavior:
+- macOS PKG installs to `/Applications`.
+- Windows NSIS installs into the system applications/programs list.
+- Linux DEB installs into desktop application menus.
 
 ## Requirements
 
@@ -72,6 +87,9 @@ All targets:
 ```bash
 npm run build
 ```
+
+Build versioning:
+- Each build command auto-increments patch version in `package.json` (for example `0.1.0` -> `0.1.1`).
 
 Per platform:
 ```bash

@@ -18,88 +18,148 @@
         </div>
       </header>
 
-      <section class="card grid-two">
-        <div>
-          <h2>Connection</h2>
-          <label for="token">Personal Access Token (optional if env TOKEN/GITLAB_TOKEN is set)</label>
-          <input id="token" type="password" placeholder="glpat-..." />
-          <button id="save-token-btn">Save Token</button>
+      <div class="app-tabs" role="tablist" aria-label="Main app tabs">
+        <button class="app-tab-btn active" data-app-tab-target="panel-main" role="tab" aria-selected="true">Main</button>
+        <button class="app-tab-btn" data-app-tab-target="panel-config" role="tab" aria-selected="false">Configuration</button>
+        <button class="app-tab-btn" data-app-tab-target="panel-repo" role="tab" aria-selected="false">Repository Views</button>
+      </div>
 
-          <label for="api-base">GitLab API Base URL</label>
-          <input id="api-base" type="text" placeholder="https://gitlab.com/api/v4" />
-          <button id="save-api-btn">Save API Base</button>
-        </div>
-        <div>
-          <h2>Polling</h2>
-          <label for="poll-interval">Poll interval (seconds, min 15)</label>
-          <input id="poll-interval" type="number" min="15" step="5" value="60" />
-          <button id="save-poll-btn">Save Poll Interval</button>
+      <div id="panel-main" class="app-tab-panel active" role="tabpanel">
+        <section class="card">
+          <h2>Current Pipeline Status</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Light</th>
+                  <th>Project Name</th>
+                  <th>Project ID</th>
+                  <th>Branch</th>
+                  <th>Pipeline</th>
+                  <th>Updated</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody id="status-table"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
 
-          <div class="status-panel">
-            <div>
-              <span class="label">Token active:</span>
-              <span id="token-active">No</span>
-            </div>
-            <div>
-              <span class="label">Token source:</span>
-              <span id="token-source">none</span>
-            </div>
-            <div>
-              <span class="label">Env TOKEN found:</span>
-              <span id="env-token-found">No</span>
-            </div>
-            <div>
-              <span class="label">Last update:</span>
-              <span id="last-update">-</span>
+      <div id="panel-config" class="app-tab-panel" role="tabpanel">
+        <section class="card">
+          <h2>Monitored Projects</h2>
+          <form id="add-project-form" class="inline-form">
+            <input id="project-id" type="text" placeholder="Project ID or group/project" required />
+            <button id="load-branches-btn" type="button">Load Branches</button>
+            <select id="project-branches" aria-label="Branch to monitor">
+              <option value="main">main</option>
+            </select>
+            <button id="submit-project-btn" type="submit">Add / Merge</button>
+          </form>
+          <p class="subnote">Use branch `latest` to monitor most recent pipeline across all branches.</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project Name</th>
+                  <th>Project ID</th>
+                  <th>Branches</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="projects-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card grid-two">
+          <div>
+            <h2>Connection</h2>
+            <label for="token">Personal Access Token (optional if env TOKEN/GITLAB_TOKEN is set)</label>
+            <input id="token" type="password" placeholder="glpat-..." />
+            <button id="save-token-btn">Save Token</button>
+
+            <label for="api-base">GitLab API Base URL</label>
+            <input id="api-base" type="text" placeholder="https://gitlab.com/api/v4" />
+            <button id="save-api-btn">Save API Base</button>
+          </div>
+          <div>
+            <h2>Polling</h2>
+            <label for="poll-interval">Poll interval (seconds, min 15)</label>
+            <input id="poll-interval" type="number" min="15" step="5" value="60" />
+            <button id="save-poll-btn">Save Poll Interval</button>
+
+            <h2 class="section-gap">Startup</h2>
+            <label class="inline-check" for="launch-on-startup">
+              <input id="launch-on-startup" type="checkbox" />
+              Launch app automatically when OS starts
+            </label>
+            <button id="save-startup-btn">Save Startup Setting</button>
+            <p id="startup-support-note" class="subnote"></p>
+
+            <div class="status-panel">
+              <div>
+                <span class="label">Token active:</span>
+                <span id="token-active">No</span>
+              </div>
+              <div>
+                <span class="label">Token source:</span>
+                <span id="token-source">none</span>
+              </div>
+              <div>
+                <span class="label">Env TOKEN found:</span>
+                <span id="env-token-found">No</span>
+              </div>
+              <div>
+                <span class="label">Last update:</span>
+                <span id="last-update">-</span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
-      <section class="card">
-        <h2>Monitored Projects</h2>
-        <form id="add-project-form" class="inline-form">
-          <input id="project-id" type="text" placeholder="Project ID or group/project" required />
-          <button id="load-branches-btn" type="button">Load Branches</button>
-          <select id="project-branches" multiple size="5" aria-label="Branches to monitor"></select>
-          <button type="submit">Add / Merge</button>
-        </form>
-        <p class="subnote">Tip: select multiple branches with Cmd/Ctrl + click (or Shift + click range).</p>
+      <div id="panel-repo" class="app-tab-panel" role="tabpanel">
+        <section class="card">
+          <h2>Repository Views</h2>
+          <div class="inline-form repo-project-form">
+            <label for="repo-project-select">Project</label>
+            <select id="repo-project-select" aria-label="Project for repository views"></select>
+            <label for="repo-branch-select">View From Branch</label>
+            <select id="repo-branch-select" aria-label="Branch for repository views"></select>
+          </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Project Name</th>
-                <th>Project ID</th>
-                <th>Branches</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="projects-table"></tbody>
-          </table>
+        <div class="tabs" role="tablist" aria-label="Repository visualization tabs">
+          <button id="tab-branch-tree" class="tab-btn active" data-tab-target="panel-branch-tree" role="tab" aria-selected="true">Branch Tree</button>
+          <button id="tab-commit-graph" class="tab-btn" data-tab-target="panel-commit-graph" role="tab" aria-selected="false">Commit Graph</button>
         </div>
-      </section>
 
-      <section class="card">
-        <h2>Current Pipeline Status</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Light</th>
-                <th>Project Name</th>
-                <th>Project ID</th>
-                <th>Branch</th>
-                <th>Pipeline</th>
-                <th>Updated</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody id="status-table"></tbody>
-          </table>
+        <div id="panel-branch-tree" class="tab-panel active" role="tabpanel">
+          <div class="inline-form tree-form">
+            <button id="load-tree-btn" type="button">Load Branch Tree</button>
+          </div>
+          <div id="branch-tree-graph" class="graph-view">Select a project and load its branch tree.</div>
         </div>
-      </section>
+
+        <div id="panel-commit-graph" class="tab-panel" role="tabpanel">
+          <div class="inline-form graph-form">
+            <label for="graph-limit">Commits</label>
+            <input id="graph-limit" type="number" min="20" max="300" step="10" value="160" />
+            <button id="load-graph-btn" type="button">Load Commit Graph</button>
+          </div>
+          <div class="graph-export-tools">
+            <button id="copy-graph-svg-btn" type="button">Copy SVG</button>
+            <button id="download-graph-svg-btn" type="button">Download SVG</button>
+          </div>
+          <div id="commit-graph" class="graph-view">Load commit graph to visualize branches and merges.</div>
+          <label for="commit-graph-svg-source">SVG Source (share this for analysis)</label>
+          <textarea id="commit-graph-svg-source" class="svg-source" spellcheck="false" readonly></textarea>
+          <div id="merge-events" class="merge-events"></div>
+        </div>
+        </section>
+      </div>
     </main>
 
     <script src="app.js"></script>

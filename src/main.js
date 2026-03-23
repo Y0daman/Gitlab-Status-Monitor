@@ -1,7 +1,7 @@
 const path = require("node:path");
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require("electron");
 const { loadConfig, saveConfig, normalizeConfig, normalizeApiBaseUrl, resolveTokenInfo } = require("./lib/config");
-const { fetchLatestPipeline, fetchProjectBranches, fetchProjectDetails } = require("./lib/gitlab");
+const { fetchLatestPipeline, fetchProjectBranches, fetchProjectDetails, fetchCommitGraph } = require("./lib/gitlab");
 const { aggregateLight, mapPipelineStatusToLight, lightEmoji, isOngoingPipeline, parseBranchesInput } = require("./lib/status");
 
 let tray;
@@ -12,10 +12,38 @@ let pollingTimer;
 let isQuitting = false;
 let trayReady = false;
 
+function supportsAutoLaunch() {
+  return process.platform === "darwin" || process.platform === "win32";
+}
+
+function isAutoLaunchAvailable() {
+  return supportsAutoLaunch() && app.isPackaged;
+}
+
+function applyAutoLaunchSetting() {
+  if (!isAutoLaunchAvailable()) {
+    return false;
+  }
+
+  const openAtLogin = Boolean(appConfig && appConfig.ui && appConfig.ui.launchOnStartup);
+  const current = app.getLoginItemSettings();
+  if (current.openAtLogin === openAtLogin) {
+    return true;
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin,
+    openAsHidden: true
+  });
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 980,
-    height: 680,
+    width: 1280,
+    height: 760,
+    minWidth: 1100,
+    minHeight: 680,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -66,6 +94,10 @@ function projectDisplay(projectId, projectName) {
   return name ? `${name} (${projectId})` : projectId;
 }
 
+function isLatestBranchSelection(branch) {
+  return String(branch || "").trim().toLowerCase() === "latest";
+}
+
 function rebuildTrayMenu() {
   const aggregate = aggregateLight(statusEntries);
   const aggregateEmoji = lightEmoji(aggregate);
@@ -103,7 +135,7 @@ function rebuildTrayMenu() {
         const light = mapPipelineStatusToLight(entry.pipelineStatus);
         const ongoingMarker = entry.isOngoing ? " (ongoing)" : "";
         menuItems.push({
-          label: `${lightEmoji(light)} ${projectDisplay(entry.projectId, entry.projectName)} [${entry.branch}] - ${entry.pipelineStatus || "unknown"}${ongoingMarker}`,
+          label: `${lightEmoji(light)} ${projectDisplay(entry.projectId, entry.projectName)} [${entry.branchDisplay || entry.branch}] - ${entry.pipelineStatus || "unknown"}${ongoingMarker}`,
           enabled: false
         });
       });
@@ -118,6 +150,11 @@ function rebuildTrayMenu() {
   });
 
   tray.setImage(createCircleIcon(aggregate));
+  if (process.platform === "darwin") {
+    tray.setTitle(` ${aggregateEmoji}`);
+  } else {
+    tray.setTitle("");
+  }
   tray.setToolTip(`GitLab Status Monitor - ${aggregate.toUpperCase()}`);
   tray.setContextMenu(Menu.buildFromTemplate(menuItems));
 }
@@ -164,6 +201,7 @@ async function refreshStatuses() {
           projectId: project.id,
           projectName: projectNameById.get(project.id) || "",
           branch,
+          branchDisplay: branch,
           pipelineStatus: "unknown",
           pipelineId: null,
           pipelineWebUrl: "",
@@ -176,11 +214,14 @@ async function refreshStatuses() {
           const pipeline = await fetchLatestPipeline({
             apiBaseUrl: appConfig.gitlab.apiBaseUrl,
             projectId: project.id,
-            branch,
+            branch: isLatestBranchSelection(branch) ? "" : branch,
             token
           });
 
           if (pipeline) {
+            if (isLatestBranchSelection(branch) && pipeline.ref) {
+              entry.branchDisplay = `latest -> ${pipeline.ref}`;
+            }
             entry.pipelineStatus = pipeline.status || "unknown";
             entry.pipelineId = pipeline.id || null;
             entry.pipelineWebUrl = pipeline.web_url || "";
@@ -209,7 +250,8 @@ async function refreshStatuses() {
       hasToken: Boolean(token),
       tokenSource: tokenInfo.source,
       hasEnvToken: tokenInfo.hasEnvToken,
-      hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken
+      hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
+      autoLaunchSupported: isAutoLaunchAvailable()
     });
   }
 }
@@ -235,7 +277,8 @@ function setupIpc() {
       hasToken: Boolean(tokenInfo.token),
       tokenSource: tokenInfo.source,
       hasEnvToken: tokenInfo.hasEnvToken,
-      hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken
+      hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
+      autoLaunchSupported: isAutoLaunchAvailable()
     };
   });
 
@@ -272,6 +315,31 @@ function setupIpc() {
     return { projectId: id, projectName, branches };
   });
 
+  ipcMain.handle("monitor:get-commit-graph", async (_, payload) => {
+    const id = String((payload && payload.projectId) || "").trim();
+    const branch = String((payload && payload.branch) || "").trim();
+    const limit = Math.max(20, Math.min(300, Number((payload && payload.limit) || 200)));
+    if (!id) {
+      throw new Error("Project id/path is required");
+    }
+
+    const tokenInfo = resolveTokenInfo(appConfig);
+    const graph = await fetchCommitGraph({
+      apiBaseUrl: appConfig.gitlab.apiBaseUrl,
+      projectId: id,
+      token: tokenInfo.token,
+      limit,
+      branch
+    });
+
+    return {
+      projectId: id,
+      commits: graph.commits,
+      branchHeads: graph.branchHeads,
+      mergedMergeRequests: graph.mergedMergeRequests
+    };
+  });
+
   ipcMain.handle("config:set-token", async (_, token) => {
     appConfig.gitlab.token = String(token || "").trim();
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
@@ -290,6 +358,13 @@ function setupIpc() {
     appConfig.pollIntervalSec = Math.max(15, Number(intervalSec) || 60);
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
     setupPolling();
+    return appConfig;
+  });
+
+  ipcMain.handle("config:set-launch-on-startup", async (_, enabled) => {
+    appConfig.ui.launchOnStartup = Boolean(enabled);
+    appConfig = await saveConfig(app.getPath("userData"), appConfig);
+    applyAutoLaunchSetting();
     return appConfig;
   });
 
@@ -339,6 +414,28 @@ function setupIpc() {
     return appConfig;
   });
 
+  ipcMain.handle("config:set-project-branches", async (_, payload) => {
+    const id = String(payload.id || "").trim();
+    if (!id) {
+      throw new Error("Project id/path is required");
+    }
+
+    const branches = Array.isArray(payload.branches)
+      ? payload.branches.map((branch) => String(branch).trim()).filter(Boolean)
+      : parseBranchesInput(payload.branchesInput || "main");
+
+    const existing = appConfig.projects.find((project) => project.id === id);
+    if (!existing) {
+      throw new Error("Project not found");
+    }
+
+    existing.branches = branches.length > 0 ? Array.from(new Set(branches)) : ["main"];
+    appConfig = normalizeConfig(appConfig);
+    appConfig = await saveConfig(app.getPath("userData"), appConfig);
+    await refreshStatuses();
+    return appConfig;
+  });
+
   ipcMain.handle("window:show", async () => {
     openDashboard();
     return { ok: true };
@@ -347,6 +444,7 @@ function setupIpc() {
 
 async function bootstrap() {
   appConfig = await loadConfig(app.getPath("userData"));
+  applyAutoLaunchSetting();
 
   createWindow();
 
