@@ -1,6 +1,7 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require("electron");
+const { watch } = require("node:fs");
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, Notification } = require("electron");
 const { loadConfig, saveConfig, normalizeConfig, normalizeApiBaseUrl, resolveTokenInfo } = require("./lib/config");
 const { fetchLatestPipeline, fetchProjectBranches, fetchProjectDetails, fetchCommitGraph } = require("./lib/gitlab");
 const { aggregateLight, mapPipelineStatusToLight, lightEmoji, isOngoingPipeline, parseBranchesInput } = require("./lib/status");
@@ -21,6 +22,9 @@ let updateOffer = {
 let pollingTimer;
 let isQuitting = false;
 let trayReady = false;
+let updatePathWatcher;
+let updatePathWatchTimer;
+let lastNotifiedUpdateKey = "";
 
 function setDockVisible(visible) {
   if (process.platform !== "darwin" || !app.dock) {
@@ -304,6 +308,117 @@ async function computeUpdateOffer() {
   };
 }
 
+function notifyUpdateAvailable(offer) {
+  if (!Notification.isSupported() || !offer || !offer.available) {
+    return;
+  }
+
+  const notification = new Notification({
+    title: "GitLab Status Monitor Update",
+    body: `Version ${offer.latestVersion} is available in ${offer.checkedPath}`
+  });
+  notification.show();
+}
+
+async function refreshUpdateOffer(notifyOnNew = false) {
+  const previous = updateOffer;
+  updateOffer = await computeUpdateOffer();
+
+  const currentKey = updateOffer.available ? `${updateOffer.latestVersion}|${updateOffer.filePath}` : "";
+  const previousKey = previous && previous.available ? `${previous.latestVersion}|${previous.filePath}` : "";
+
+  if (!updateOffer.available) {
+    lastNotifiedUpdateKey = "";
+    return updateOffer;
+  }
+
+  if (!notifyOnNew) {
+    return updateOffer;
+  }
+
+  if (currentKey !== previousKey && currentKey !== lastNotifiedUpdateKey) {
+    notifyUpdateAvailable(updateOffer);
+    lastNotifiedUpdateKey = currentKey;
+  }
+
+  return updateOffer;
+}
+
+function sendStatusUpdate(tokenInfo = resolveTokenInfo(appConfig)) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send("monitor:status-update", {
+    config: appConfig,
+    entries: statusEntries,
+    generatedAt: new Date().toISOString(),
+    hasToken: Boolean(tokenInfo.token),
+    tokenSource: tokenInfo.source,
+    hasEnvToken: tokenInfo.hasEnvToken,
+    hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
+    autoLaunchSupported: isAutoLaunchAvailable(),
+    updateOffer
+  });
+}
+
+function stopUpdatePathWatcher() {
+  if (updatePathWatchTimer) {
+    clearTimeout(updatePathWatchTimer);
+    updatePathWatchTimer = undefined;
+  }
+
+  if (updatePathWatcher) {
+    updatePathWatcher.close();
+    updatePathWatcher = undefined;
+  }
+}
+
+function scheduleUpdatePathRescan() {
+  if (updatePathWatchTimer) {
+    clearTimeout(updatePathWatchTimer);
+  }
+
+  updatePathWatchTimer = setTimeout(async () => {
+    updatePathWatchTimer = undefined;
+    await refreshUpdateOffer(true);
+    if (trayReady) {
+      rebuildTrayMenu();
+    }
+    sendStatusUpdate();
+  }, 450);
+}
+
+function startUpdatePathWatcher() {
+  stopUpdatePathWatcher();
+
+  const checkedPath = String((appConfig && appConfig.ui && appConfig.ui.updatePath) || "").trim();
+  if (!checkedPath) {
+    return;
+  }
+
+  const tryWatch = (targetPath) => {
+    const watcher = watch(targetPath, () => {
+      scheduleUpdatePathRescan();
+    });
+    watcher.on("error", () => {
+      scheduleUpdatePathRescan();
+    });
+    return watcher;
+  };
+
+  try {
+    updatePathWatcher = tryWatch(checkedPath);
+    return;
+  } catch {
+    try {
+      updatePathWatcher = tryWatch(path.dirname(checkedPath));
+    } catch {
+      updatePathWatcher = undefined;
+    }
+  }
+}
+
 function rebuildTrayMenu() {
   const aggregate = aggregateLight(statusEntries);
   const aggregateEmoji = lightEmoji(aggregate);
@@ -311,7 +426,21 @@ function rebuildTrayMenu() {
     {
       label: `${aggregateEmoji} Overall: ${aggregate.toUpperCase()}`,
       enabled: false
-    },
+    }
+  ];
+
+  if (updateOffer && updateOffer.available) {
+    menuItems.push({
+      label: `Update available: ${updateOffer.latestVersion}`,
+      click: () => {
+        if (updateOffer.filePath) {
+          shell.openPath(updateOffer.filePath);
+        }
+      }
+    });
+  }
+
+  menuItems.push(
     {
       label: "Open Dashboard",
       click: () => openDashboard()
@@ -330,7 +459,7 @@ function rebuildTrayMenu() {
         rebuildTrayMenu();
       }
     }
-  ];
+  );
 
   if (appConfig.ui.expandedTray && statusEntries.length > 0) {
     menuItems.push({ type: "separator" });
@@ -368,7 +497,8 @@ function rebuildTrayMenu() {
   } else {
     tray.setTitle("");
   }
-  tray.setToolTip(`GitLab Status Monitor - ${aggregate.toUpperCase()}`);
+  const updateHint = updateOffer && updateOffer.available ? ` | Update ${updateOffer.latestVersion}` : "";
+  tray.setToolTip(`GitLab Status Monitor - ${aggregate.toUpperCase()}${updateHint}`);
   tray.setContextMenu(Menu.buildFromTemplate(menuItems));
 }
 
@@ -377,7 +507,7 @@ async function refreshStatuses() {
   const token = tokenInfo.token;
   const entries = [];
   const projectNameById = new Map(appConfig.projects.map((project) => [project.id, project.name || ""]));
-  updateOffer = await computeUpdateOffer();
+  await refreshUpdateOffer(true);
 
   let configUpdated = false;
   await Promise.all(
@@ -462,20 +592,7 @@ async function refreshStatuses() {
   if (trayReady) {
     rebuildTrayMenu();
   }
-
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send("monitor:status-update", {
-      config: appConfig,
-      entries: statusEntries,
-      generatedAt: new Date().toISOString(),
-      hasToken: Boolean(token),
-      tokenSource: tokenInfo.source,
-      hasEnvToken: tokenInfo.hasEnvToken,
-      hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
-      autoLaunchSupported: isAutoLaunchAvailable(),
-      updateOffer
-    });
-  }
+  sendStatusUpdate(tokenInfo);
 }
 
 function setupPolling() {
@@ -594,6 +711,7 @@ function setupIpc() {
   ipcMain.handle("config:set-update-path", async (_, updatePath) => {
     appConfig.ui.updatePath = String(updatePath || "").trim();
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
+    startUpdatePathWatcher();
     await refreshStatuses();
     return appConfig;
   });
@@ -693,12 +811,16 @@ function setupIpc() {
   });
 
   ipcMain.handle("updater:check", async () => {
-    updateOffer = await computeUpdateOffer();
+    await refreshUpdateOffer(false);
+    if (trayReady) {
+      rebuildTrayMenu();
+    }
+    sendStatusUpdate();
     return updateOffer;
   });
 
   ipcMain.handle("updater:install", async () => {
-    updateOffer = await computeUpdateOffer();
+    await refreshUpdateOffer(false);
     if (!updateOffer.available || !updateOffer.filePath) {
       return { ok: false, message: "No update installer found" };
     }
@@ -720,6 +842,7 @@ function setupIpc() {
 async function bootstrap() {
   appConfig = await loadConfig(app.getPath("userData"));
   applyAutoLaunchSetting();
+  startUpdatePathWatcher();
 
   createWindow();
 
@@ -746,6 +869,7 @@ app.whenReady().then(bootstrap);
 
 app.on("before-quit", () => {
   isQuitting = true;
+  stopUpdatePathWatcher();
   if (pollingTimer) {
     clearInterval(pollingTimer);
   }

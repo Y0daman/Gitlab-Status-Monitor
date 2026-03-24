@@ -1,6 +1,6 @@
 {
   "name": "gitlab-status-monitor",
-  "version": "0.1.17",
+  "version": "0.1.19",
   "description": "Tray application for monitoring GitLab pipeline status with traffic lights",
   "main": "src/main.js",
   "author": {
