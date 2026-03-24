@@ -1,4 +1,5 @@
 const path = require("node:path");
+const fs = require("node:fs/promises");
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } = require("electron");
 const { loadConfig, saveConfig, normalizeConfig, normalizeApiBaseUrl, resolveTokenInfo } = require("./lib/config");
 const { fetchLatestPipeline, fetchProjectBranches, fetchProjectDetails, fetchCommitGraph } = require("./lib/gitlab");
@@ -8,6 +9,15 @@ let tray;
 let mainWindow;
 let appConfig;
 let statusEntries = [];
+let updateOffer = {
+  available: false,
+  currentVersion: "",
+  latestVersion: "",
+  filePath: "",
+  fileName: "",
+  checkedPath: "",
+  error: ""
+};
 let pollingTimer;
 let isQuitting = false;
 let trayReady = false;
@@ -156,6 +166,144 @@ function prunePausedEntriesForProject(projectId, branches) {
   });
 }
 
+function parseSemver(text) {
+  const match = String(text || "").match(/(^|[^0-9])v?(\d+)\.(\d+)\.(\d+)([^0-9]|$)/);
+  if (!match) {
+    return null;
+  }
+  return {
+    major: Number(match[2]),
+    minor: Number(match[3]),
+    patch: Number(match[4])
+  };
+}
+
+function compareSemver(a, b) {
+  if (a.major !== b.major) {
+    return a.major - b.major;
+  }
+  if (a.minor !== b.minor) {
+    return a.minor - b.minor;
+  }
+  return a.patch - b.patch;
+}
+
+function extensionPriority(fileName) {
+  const lower = String(fileName || "").toLowerCase();
+  if (process.platform === "darwin") {
+    if (lower.endsWith(".dmg")) {
+      return 0;
+    }
+    if (lower.endsWith(".pkg")) {
+      return 1;
+    }
+  }
+  if (process.platform === "win32") {
+    if (lower.endsWith(".exe")) {
+      return 0;
+    }
+    if (lower.endsWith(".msi")) {
+      return 1;
+    }
+  }
+  if (process.platform === "linux") {
+    if (lower.endsWith(".appimage")) {
+      return 0;
+    }
+    if (lower.endsWith(".deb")) {
+      return 1;
+    }
+  }
+  return 99;
+}
+
+function isInstallerForCurrentPlatform(fileName) {
+  const lower = String(fileName || "").toLowerCase();
+  if (process.platform === "darwin") {
+    return lower.endsWith(".dmg") || lower.endsWith(".pkg");
+  }
+  if (process.platform === "win32") {
+    return lower.endsWith(".exe") || lower.endsWith(".msi");
+  }
+  return lower.endsWith(".appimage") || lower.endsWith(".deb");
+}
+
+async function computeUpdateOffer() {
+  const checkedPath = String((appConfig && appConfig.ui && appConfig.ui.updatePath) || "").trim();
+  const currentVersionText = app.getVersion();
+  const currentVersion = parseSemver(currentVersionText);
+
+  const base = {
+    available: false,
+    currentVersion: currentVersionText,
+    latestVersion: "",
+    filePath: "",
+    fileName: "",
+    checkedPath,
+    error: ""
+  };
+
+  if (!checkedPath) {
+    return {
+      ...base,
+      error: "Update path is not configured"
+    };
+  }
+
+  if (!currentVersion) {
+    return {
+      ...base,
+      error: "Current app version is not semantic"
+    };
+  }
+
+  let names;
+  try {
+    names = await fs.readdir(checkedPath);
+  } catch (error) {
+    return {
+      ...base,
+      error: `Cannot read update path: ${error.message || error}`
+    };
+  }
+
+  const candidates = names
+    .filter((name) => isInstallerForCurrentPlatform(name))
+    .map((name) => {
+      const version = parseSemver(name);
+      if (!version) {
+        return null;
+      }
+      return { name, version };
+    })
+    .filter(Boolean);
+
+  if (candidates.length === 0) {
+    return base;
+  }
+
+  candidates.sort((a, b) => {
+    const versionCmp = compareSemver(b.version, a.version);
+    if (versionCmp !== 0) {
+      return versionCmp;
+    }
+    return extensionPriority(a.name) - extensionPriority(b.name);
+  });
+
+  const best = candidates[0];
+  if (compareSemver(best.version, currentVersion) <= 0) {
+    return base;
+  }
+
+  return {
+    ...base,
+    available: true,
+    latestVersion: `${best.version.major}.${best.version.minor}.${best.version.patch}`,
+    filePath: path.join(checkedPath, best.name),
+    fileName: best.name
+  };
+}
+
 function rebuildTrayMenu() {
   const aggregate = aggregateLight(statusEntries);
   const aggregateEmoji = lightEmoji(aggregate);
@@ -229,6 +377,7 @@ async function refreshStatuses() {
   const token = tokenInfo.token;
   const entries = [];
   const projectNameById = new Map(appConfig.projects.map((project) => [project.id, project.name || ""]));
+  updateOffer = await computeUpdateOffer();
 
   let configUpdated = false;
   await Promise.all(
@@ -323,7 +472,8 @@ async function refreshStatuses() {
       tokenSource: tokenInfo.source,
       hasEnvToken: tokenInfo.hasEnvToken,
       hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
-      autoLaunchSupported: isAutoLaunchAvailable()
+      autoLaunchSupported: isAutoLaunchAvailable(),
+      updateOffer
     });
   }
 }
@@ -350,7 +500,8 @@ function setupIpc() {
       tokenSource: tokenInfo.source,
       hasEnvToken: tokenInfo.hasEnvToken,
       hasEnvGitLabToken: tokenInfo.hasEnvGitLabToken,
-      autoLaunchSupported: isAutoLaunchAvailable()
+      autoLaunchSupported: isAutoLaunchAvailable(),
+      updateOffer
     };
   });
 
@@ -437,6 +588,13 @@ function setupIpc() {
     appConfig.ui.launchOnStartup = Boolean(enabled);
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
     applyAutoLaunchSetting();
+    return appConfig;
+  });
+
+  ipcMain.handle("config:set-update-path", async (_, updatePath) => {
+    appConfig.ui.updatePath = String(updatePath || "").trim();
+    appConfig = await saveConfig(app.getPath("userData"), appConfig);
+    await refreshStatuses();
     return appConfig;
   });
 
@@ -532,6 +690,25 @@ function setupIpc() {
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
     await refreshStatuses();
     return appConfig;
+  });
+
+  ipcMain.handle("updater:check", async () => {
+    updateOffer = await computeUpdateOffer();
+    return updateOffer;
+  });
+
+  ipcMain.handle("updater:install", async () => {
+    updateOffer = await computeUpdateOffer();
+    if (!updateOffer.available || !updateOffer.filePath) {
+      return { ok: false, message: "No update installer found" };
+    }
+
+    const result = await shell.openPath(updateOffer.filePath);
+    if (result) {
+      return { ok: false, message: result };
+    }
+
+    return { ok: true, filePath: updateOffer.filePath };
   });
 
   ipcMain.handle("window:show", async () => {

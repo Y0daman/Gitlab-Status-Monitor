@@ -24,13 +24,18 @@ const elements = {
   saveApiBtn: document.getElementById("save-api-btn"),
   savePollBtn: document.getElementById("save-poll-btn"),
   saveStartupBtn: document.getElementById("save-startup-btn"),
+  saveUpdatePathBtn: document.getElementById("save-update-path-btn"),
+  checkUpdateBtn: document.getElementById("check-update-btn"),
+  installUpdateBtn: document.getElementById("install-update-btn"),
   loadBranchesBtn: document.getElementById("load-branches-btn"),
   submitProjectBtn: document.getElementById("submit-project-btn"),
   tokenInput: document.getElementById("token"),
   apiBaseInput: document.getElementById("api-base"),
   pollIntervalInput: document.getElementById("poll-interval"),
   launchOnStartupInput: document.getElementById("launch-on-startup"),
+  updatePathInput: document.getElementById("update-path"),
   startupSupportNote: document.getElementById("startup-support-note"),
+  updateStatus: document.getElementById("update-status"),
   tokenActive: document.getElementById("token-active"),
   tokenSource: document.getElementById("token-source"),
   envTokenFound: document.getElementById("env-token-found"),
@@ -78,6 +83,29 @@ function pausedEntrySet() {
     ? appState.config.ui.pausedEntries
     : [];
   return new Set(pausedEntries);
+}
+
+function renderUpdateOffer(offer) {
+  const info = offer || {};
+  if (elements.installUpdateBtn) {
+    elements.installUpdateBtn.disabled = !Boolean(info.available);
+  }
+
+  if (!elements.updateStatus) {
+    return;
+  }
+
+  if (info.available) {
+    elements.updateStatus.textContent = `Update available: ${info.latestVersion} (${info.fileName || "installer"})`;
+    return;
+  }
+
+  if (info.error) {
+    elements.updateStatus.textContent = `Update check error: ${info.error}`;
+    return;
+  }
+
+  elements.updateStatus.textContent = "No newer installer found in update path.";
 }
 
 function renderBranchTreeSvg(branches) {
@@ -1017,11 +1045,12 @@ function renderStatuses(entries) {
 
 function renderState(payload) {
   appState = payload;
-  const { config, entries, generatedAt, hasToken, tokenSource, hasEnvToken, autoLaunchSupported } = payload;
+  const { config, entries, generatedAt, hasToken, tokenSource, hasEnvToken, autoLaunchSupported, updateOffer } = payload;
 
   elements.apiBaseInput.value = config.gitlab.apiBaseUrl;
   elements.pollIntervalInput.value = String(config.pollIntervalSec);
   elements.launchOnStartupInput.checked = Boolean(config.ui && config.ui.launchOnStartup);
+  elements.updatePathInput.value = String((config.ui && config.ui.updatePath) || "");
   elements.launchOnStartupInput.disabled = !autoLaunchSupported;
   elements.saveStartupBtn.disabled = !autoLaunchSupported;
   elements.startupSupportNote.textContent = autoLaunchSupported
@@ -1031,6 +1060,7 @@ function renderState(payload) {
   elements.tokenSource.textContent = tokenSource || "none";
   elements.envTokenFound.textContent = hasEnvToken ? "Yes" : "No";
   elements.lastUpdate.textContent = generatedAt ? new Date(generatedAt).toLocaleString() : "-";
+  renderUpdateOffer(updateOffer);
 
   renderProjects(config.projects);
   renderTreeProjectOptions(config.projects);
@@ -1066,6 +1096,28 @@ elements.savePollBtn.addEventListener("click", async () => {
 elements.saveStartupBtn.addEventListener("click", async () => {
   await window.monitorApi.setLaunchOnStartup(Boolean(elements.launchOnStartupInput.checked));
   await refreshState();
+});
+
+elements.saveUpdatePathBtn.addEventListener("click", async () => {
+  await window.monitorApi.setUpdatePath(elements.updatePathInput.value);
+  await refreshState();
+});
+
+elements.checkUpdateBtn.addEventListener("click", async () => {
+  const offer = await window.monitorApi.checkUpdate();
+  renderUpdateOffer(offer);
+  await refreshState();
+});
+
+elements.installUpdateBtn.addEventListener("click", async () => {
+  const result = await window.monitorApi.installUpdate();
+  if (!result || !result.ok) {
+    const message = result && result.message ? result.message : "Failed to launch installer";
+    elements.updateStatus.textContent = `Install failed: ${message}`;
+    return;
+  }
+
+  elements.updateStatus.textContent = `Installer launched: ${result.filePath}`;
 });
 
 elements.addProjectForm.addEventListener("submit", async (event) => {

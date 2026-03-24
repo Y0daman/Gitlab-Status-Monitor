@@ -8,6 +8,7 @@ test("normalizeConfig keeps defaults", () => {
   assert.equal(cfg.gitlab.apiBaseUrl, DEFAULT_CONFIG.gitlab.apiBaseUrl);
   assert.equal(cfg.ui.launchOnStartup, false);
   assert.deepEqual(cfg.ui.pausedEntries, []);
+  assert.equal(cfg.ui.updatePath, DEFAULT_CONFIG.ui.updatePath);
   assert.deepEqual(cfg.projects, []);
 });
 

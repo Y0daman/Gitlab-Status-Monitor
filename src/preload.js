@@ -9,10 +9,13 @@ contextBridge.exposeInMainWorld("monitorApi", {
   setApiBaseUrl: (url) => ipcRenderer.invoke("config:set-api-base", url),
   setPollInterval: (intervalSec) => ipcRenderer.invoke("config:set-poll-interval", intervalSec),
   setLaunchOnStartup: (enabled) => ipcRenderer.invoke("config:set-launch-on-startup", enabled),
+  setUpdatePath: (updatePath) => ipcRenderer.invoke("config:set-update-path", updatePath),
   addProject: (payload) => ipcRenderer.invoke("config:add-project", payload),
   setProjectBranches: (payload) => ipcRenderer.invoke("config:set-project-branches", payload),
   setBranchPaused: (payload) => ipcRenderer.invoke("config:set-branch-paused", payload),
   removeProject: (projectId) => ipcRenderer.invoke("config:remove-project", projectId),
+  checkUpdate: () => ipcRenderer.invoke("updater:check"),
+  installUpdate: () => ipcRenderer.invoke("updater:install"),
   onStatusUpdate: (handler) => {
     const listener = (_, payload) => handler(payload);
     ipcRenderer.on("monitor:status-update", listener);

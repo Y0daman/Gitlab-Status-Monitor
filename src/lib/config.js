@@ -11,7 +11,8 @@ const DEFAULT_CONFIG = {
   ui: {
     expandedTray: false,
     launchOnStartup: false,
-    pausedEntries: []
+    pausedEntries: [],
+    updatePath: "/Volumes/CEVAULT512/git/Gitlab-Status-Monitor/dist"
   },
   projects: []
 };
@@ -63,6 +64,8 @@ function normalizeConfig(input) {
   merged.ui.pausedEntries = Array.isArray(merged.ui.pausedEntries)
     ? Array.from(new Set(merged.ui.pausedEntries.map((item) => String(item || "").trim()).filter(Boolean)))
     : [];
+
+  merged.ui.updatePath = String(merged.ui.updatePath || DEFAULT_CONFIG.ui.updatePath).trim() || DEFAULT_CONFIG.ui.updatePath;
 
   merged.gitlab.apiBaseUrl = normalizeApiBaseUrl(merged.gitlab.apiBaseUrl);
 
