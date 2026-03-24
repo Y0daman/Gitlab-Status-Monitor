@@ -129,6 +129,33 @@ function isLatestBranchSelection(branch) {
   return String(branch || "").trim().toLowerCase() === "latest";
 }
 
+function monitorEntryKey(projectId, branch) {
+  return `${String(projectId || "").trim()}::${String(branch || "").trim()}`;
+}
+
+function isBranchPaused(projectId, branch) {
+  const pausedEntries = (appConfig && appConfig.ui && Array.isArray(appConfig.ui.pausedEntries))
+    ? appConfig.ui.pausedEntries
+    : [];
+  return pausedEntries.includes(monitorEntryKey(projectId, branch));
+}
+
+function prunePausedEntriesForProject(projectId, branches) {
+  const id = String(projectId || "").trim();
+  const validBranches = new Set((branches || []).map((branch) => String(branch || "").trim()).filter(Boolean));
+  const pausedEntries = (appConfig && appConfig.ui && Array.isArray(appConfig.ui.pausedEntries))
+    ? appConfig.ui.pausedEntries
+    : [];
+
+  appConfig.ui.pausedEntries = pausedEntries.filter((item) => {
+    const [itemProjectId, itemBranch] = String(item).split("::");
+    if (itemProjectId !== id) {
+      return true;
+    }
+    return validBranches.has(itemBranch);
+  });
+}
+
 function rebuildTrayMenu() {
   const aggregate = aggregateLight(statusEntries);
   const aggregateEmoji = lightEmoji(aggregate);
@@ -235,18 +262,25 @@ async function refreshStatuses() {
   await Promise.all(
     appConfig.projects.flatMap((project) =>
       project.branches.map(async (branch) => {
+        const paused = isBranchPaused(project.id, branch);
         const entry = {
           projectId: project.id,
           projectName: projectNameById.get(project.id) || "",
           branch,
           branchDisplay: branch,
-          pipelineStatus: "unknown",
+          pipelineStatus: paused ? "paused" : "unknown",
           pipelineId: null,
           pipelineWebUrl: "",
           updatedAt: "",
           error: "",
-          isOngoing: false
+          isOngoing: false,
+          isPaused: paused
         };
+
+        if (paused) {
+          entries.push(entry);
+          return;
+        }
 
         try {
           const pipeline = await fetchLatestPipeline({
@@ -447,6 +481,7 @@ function setupIpc() {
 
   ipcMain.handle("config:remove-project", async (_, projectId) => {
     appConfig.projects = appConfig.projects.filter((project) => project.id !== projectId);
+    appConfig.ui.pausedEntries = (appConfig.ui.pausedEntries || []).filter((item) => !String(item).startsWith(`${projectId}::`));
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
     await refreshStatuses();
     return appConfig;
@@ -468,6 +503,31 @@ function setupIpc() {
     }
 
     existing.branches = branches.length > 0 ? Array.from(new Set(branches)) : ["main"];
+    prunePausedEntriesForProject(id, existing.branches);
+    appConfig = normalizeConfig(appConfig);
+    appConfig = await saveConfig(app.getPath("userData"), appConfig);
+    await refreshStatuses();
+    return appConfig;
+  });
+
+  ipcMain.handle("config:set-branch-paused", async (_, payload) => {
+    const id = String((payload && payload.id) || "").trim();
+    const branch = String((payload && payload.branch) || "").trim();
+    const paused = Boolean(payload && payload.paused);
+
+    if (!id || !branch) {
+      throw new Error("Project id/path and branch are required");
+    }
+
+    const key = monitorEntryKey(id, branch);
+    const pausedSet = new Set((appConfig.ui.pausedEntries || []).map((item) => String(item)));
+    if (paused) {
+      pausedSet.add(key);
+    } else {
+      pausedSet.delete(key);
+    }
+
+    appConfig.ui.pausedEntries = Array.from(pausedSet);
     appConfig = normalizeConfig(appConfig);
     appConfig = await saveConfig(app.getPath("userData"), appConfig);
     await refreshStatuses();

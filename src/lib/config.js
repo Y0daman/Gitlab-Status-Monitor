@@ -10,7 +10,8 @@ const DEFAULT_CONFIG = {
   },
   ui: {
     expandedTray: false,
-    launchOnStartup: false
+    launchOnStartup: false,
+    pausedEntries: []
   },
   projects: []
 };
@@ -57,6 +58,10 @@ function normalizeConfig(input) {
             ? project.branches.map((branch) => String(branch).trim()).filter(Boolean)
             : ["main"]
         }))
+    : [];
+
+  merged.ui.pausedEntries = Array.isArray(merged.ui.pausedEntries)
+    ? Array.from(new Set(merged.ui.pausedEntries.map((item) => String(item || "").trim()).filter(Boolean)))
     : [];
 
   merged.gitlab.apiBaseUrl = normalizeApiBaseUrl(merged.gitlab.apiBaseUrl);

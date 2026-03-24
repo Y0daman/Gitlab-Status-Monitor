@@ -69,6 +69,17 @@ function projectDisplayName(project) {
   return project.name || "-";
 }
 
+function monitorEntryKey(projectId, branch) {
+  return `${String(projectId || "").trim()}::${String(branch || "").trim()}`;
+}
+
+function pausedEntrySet() {
+  const pausedEntries = appState && appState.config && appState.config.ui && Array.isArray(appState.config.ui.pausedEntries)
+    ? appState.config.ui.pausedEntries
+    : [];
+  return new Set(pausedEntries);
+}
+
 function renderBranchTreeSvg(branches) {
   const root = { key: "root", label: "root", fullPath: "", terminal: false, children: [] };
   const byPath = new Map([["", root]]);
@@ -866,6 +877,7 @@ async function wireStatusBranchSelectors(projects) {
 
 function renderProjects(projects) {
   elements.projectsTable.innerHTML = "";
+  const pausedSet = pausedEntrySet();
 
   if (!projects || projects.length === 0) {
     const row = document.createElement("tr");
@@ -887,6 +899,7 @@ function renderProjects(projects) {
             <select data-project-branch-select="1" data-project-id="${project.id}" data-current-branch="${branch}" aria-label="Choose replacement branch for ${project.id}">
               <option>Loading...</option>
             </select>
+            <button data-toggle-pause="1" data-project-id="${project.id}" data-current-branch="${branch}" data-paused="${pausedSet.has(monitorEntryKey(project.id, branch)) ? "1" : "0"}">${pausedSet.has(monitorEntryKey(project.id, branch)) ? "Resume" : "Pause"}</button>
             <button data-remove-project-branch="1" data-project-id="${project.id}" data-current-branch="${branch}">Remove</button>
           </div>
         </td>
@@ -918,6 +931,25 @@ function renderProjects(projects) {
       await refreshState();
     });
   }
+
+  for (const button of elements.projectsTable.querySelectorAll("button[data-toggle-pause]")) {
+    button.addEventListener("click", async () => {
+      const projectId = String(button.dataset.projectId || "").trim();
+      const branch = String(button.dataset.currentBranch || "").trim();
+      const currentlyPaused = String(button.dataset.paused || "0") === "1";
+      if (!projectId || !branch) {
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        await window.monitorApi.setBranchPaused({ id: projectId, branch, paused: !currentlyPaused });
+        await refreshState();
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
 }
 
 function renderStatuses(entries) {
@@ -925,16 +957,20 @@ function renderStatuses(entries) {
 
   if (!entries || entries.length === 0) {
     const row = document.createElement("tr");
-    row.innerHTML = `<td colspan="7">No project branches to monitor.</td>`;
+    row.innerHTML = `<td colspan="8">No project branches to monitor.</td>`;
     elements.statusTable.appendChild(row);
     return;
   }
+
+  const pausedSet = pausedEntrySet();
 
   for (const entry of entries.slice().sort((a, b) => `${a.projectId}:${a.branch}`.localeCompare(`${b.projectId}:${b.branch}`))) {
     const row = document.createElement("tr");
     const light = statusToLight(entry.pipelineStatus);
     const ongoing = entry.isOngoing ? " (ongoing)" : "";
-    const details = entry.error
+    const details = entry.isPaused
+      ? "Monitoring paused"
+      : entry.error
       ? `Error: ${entry.error}`
       : entry.pipelineWebUrl
         ? `<a href="${entry.pipelineWebUrl}" target="_blank" rel="noreferrer">Pipeline #${entry.pipelineId || "?"}</a>`
@@ -951,12 +987,32 @@ function renderStatuses(entries) {
       </td>
       <td>${entry.pipelineStatus || "unknown"}${ongoing}</td>
       <td>${entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : "-"}</td>
+      <td><button data-status-toggle-pause="1" data-project-id="${entry.projectId}" data-current-branch="${entry.branch}" data-paused="${pausedSet.has(monitorEntryKey(entry.projectId, entry.branch)) ? "1" : "0"}">${pausedSet.has(monitorEntryKey(entry.projectId, entry.branch)) ? "Resume" : "Pause"}</button></td>
       <td class="break">${details}</td>
     `;
     elements.statusTable.appendChild(row);
   }
 
   wireStatusBranchSelectors((appState && appState.config && appState.config.projects) || []);
+
+  for (const button of elements.statusTable.querySelectorAll("button[data-status-toggle-pause]")) {
+    button.addEventListener("click", async () => {
+      const projectId = String(button.dataset.projectId || "").trim();
+      const branch = String(button.dataset.currentBranch || "").trim();
+      const currentlyPaused = String(button.dataset.paused || "0") === "1";
+      if (!projectId || !branch) {
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        await window.monitorApi.setBranchPaused({ id: projectId, branch, paused: !currentlyPaused });
+        await refreshState();
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
 }
 
 function renderState(payload) {

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("monitorApi", {
   setLaunchOnStartup: (enabled) => ipcRenderer.invoke("config:set-launch-on-startup", enabled),
   addProject: (payload) => ipcRenderer.invoke("config:add-project", payload),
   setProjectBranches: (payload) => ipcRenderer.invoke("config:set-project-branches", payload),
+  setBranchPaused: (payload) => ipcRenderer.invoke("config:set-branch-paused", payload),
   removeProject: (projectId) => ipcRenderer.invoke("config:remove-project", projectId),
   onStatusUpdate: (handler) => {
     const listener = (_, payload) => handler(payload);
