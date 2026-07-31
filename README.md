@@ -48,8 +48,9 @@ Installer behavior:
 
 ## Requirements
 
-- Node.js 20+ (Node 22 recommended)
+- Node.js 20+ (Node 22 LTS recommended)
 - npm 10+
+- Electron 43 and electron-builder 26 are managed as devDependencies.
 
 ## Run locally
 
@@ -104,20 +105,61 @@ Helper scripts:
 
 Note: helper scripts build installers for the current host OS. To produce all platform installers, run in CI with one runner per OS (macOS, Windows, Linux).
 
+Build output:
+- Installers and unpacked apps are written to `dist/`.
+
+### App icons
+
+App icons live in `build/` (electron-builder's default build resources directory):
+
+- `build/icon.png` - 1024x1024 master PNG (Linux; source for other formats)
+- `build/icon.icns` - macOS icon set (16/32/64/128/256/512/1024)
+- `build/icon.ico` - Windows icon set (16/24/32/48/64/128/256)
+
+To regenerate all formats from a new master `build/icon.png`:
+
+```bash
+magick build/icon.png build/icon.ico -define icon:auto-resize=16,24,32,48,64,128,256
+```
+
+For the macOS `.icns`, build an iconset and run `iconutil -c icns`.
+
+### ExFAT / external volume note
+
+When the repository lives on a volume without native extended-attribute support
+(ExFAT, FAT, SMB with xattr store disabled), macOS writes `._*` AppleDouble
+sidecar files for any file that carries xattrs (e.g. `com.apple.provenance`).
+electron-builder 26 treats a `._app.asar` sidecar as an ASAR archive while
+computing the ASAR integrity hash and fails with a
+`The value of "offset" is out of range` RangeError.
+
+The npm `build*` scripts route through `scripts/build-staged.sh`, which stages
+the electron-builder output on an APFS volume and copies the finished artifacts
+into `dist/`, avoiding the sidecar files entirely. No manual workaround is
+needed on such volumes.
+
 ## Automated Releases
 
-- GitHub Actions workflow: `.github/workflows/release.yml`
-- On every push to `main`, it:
+- `.github/workflows/auto-tag.yml` tags the next patch version on every push to `main`.
+- `.github/workflows/release.yml` triggers on tags and manual dispatch and:
   - runs tests
   - builds platform installers on Linux/Windows/macOS
-  - creates a prerelease with build artifacts
+  - creates a GitHub release with build artifacts
 - The workflow uses `secrets.GITHUB_TOKEN` automatically.
 
 ## Troubleshooting
 
-- If packaging fails with ASAR/offset errors on macOS external volumes, remove AppleDouble files and retry:
-  - `find . -name '._*' -type f -delete`
+- ASAR/offset failures on macOS external volumes are handled automatically by
+  `scripts/build-staged.sh` (see "ExFAT / external volume note" above). The old
+  `find . -name '._*' -type f -delete` workaround is no longer sufficient for
+  electron-builder 26.
 - If git reports `non-monotonic index ... ._pack...idx`, remove sidecar files under `.git` and run `git fsck`.
+
+## macOS signing and notarization
+
+Signing is intentionally not implemented yet. See `docs/macos-signing.md` for
+the documented prerequisites and the step-by-step plan to enable Developer ID
+signing, notarization, and stapling in a future task.
 
 ## Project docs
 

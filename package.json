@@ -10,7 +10,6 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dev": "electron .",
     "test": "node --test test/config.test.js test/status.test.js",
     "bump:build-version": "npm version patch --no-git-tag-version",
     "build": "npm run bump:build-version && scripts/build-staged.sh --publish never",
