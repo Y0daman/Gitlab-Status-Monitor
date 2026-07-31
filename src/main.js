@@ -26,6 +26,16 @@ let updatePathWatcher;
 let updatePathWatchTimer;
 let lastNotifiedUpdateKey = "";
 
+function sanitizeConfigForRenderer(config) {
+  return {
+    ...config,
+    gitlab: {
+      ...config.gitlab,
+      token: ""
+    }
+  };
+}
+
 function setDockVisible(visible) {
   if (process.platform !== "darwin" || !app.dock) {
     return;
@@ -75,7 +85,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   });
 
@@ -350,7 +361,7 @@ function sendStatusUpdate(tokenInfo = resolveTokenInfo(appConfig)) {
   }
 
   mainWindow.webContents.send("monitor:status-update", {
-    config: appConfig,
+    config: sanitizeConfigForRenderer(appConfig),
     entries: statusEntries,
     generatedAt: new Date().toISOString(),
     hasToken: Boolean(tokenInfo.token),
@@ -610,7 +621,7 @@ function setupIpc() {
   ipcMain.handle("monitor:get-state", async () => {
     const tokenInfo = resolveTokenInfo(appConfig);
     return {
-      config: appConfig,
+      config: sanitizeConfigForRenderer(appConfig),
       entries: statusEntries,
       generatedAt: new Date().toISOString(),
       hasToken: Boolean(tokenInfo.token),
@@ -866,6 +877,12 @@ async function bootstrap() {
 }
 
 app.whenReady().then(bootstrap);
+
+app.on("web-contents-created", (_event, contents) => {
+  contents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+});
 
 app.on("before-quit", () => {
   isQuitting = true;
