@@ -1,6 +1,6 @@
 {
   "name": "gitlab-status-monitor",
-  "version": "0.1.19",
+  "version": "0.1.21",
   "description": "Tray application for monitoring GitLab pipeline status with traffic lights",
   "main": "src/main.js",
   "author": {
@@ -19,8 +19,8 @@
     "build:linux": "npm run bump:build-version && electron-builder --linux AppImage deb --publish never"
   },
   "devDependencies": {
-    "electron": "^31.2.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.example.gitlab-status-monitor",
