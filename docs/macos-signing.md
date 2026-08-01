@@ -83,9 +83,9 @@ Actions):
 | `CSC_KEY_PASSWORD` | Password for `CSC_LINK` | for signed .app | |
 | `CSC_INSTALLER_LINK` | Base64 `.p12` of the Developer ID Installer cert | for signed .pkg | |
 | `CSC_INSTALLER_KEY_PASSWORD` | Password for `CSC_INSTALLER_LINK` | for signed .pkg | |
-| `APPLE_ID` | Apple ID used for notarization | for notarization | jimmyahs@gmail.com |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` | for notarization | `<redacted>` |
-| `APPLE_TEAM_ID` | Team ID of the Apple Developer account | for notarization | `97FLAA5Y8G` |
+| `APPLE_ID` | Apple ID used for notarization | for notarization | (your Apple ID) |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` | for notarization | (your app-specific password) |
+| `APPLE_TEAM_ID` | Team ID of the Apple Developer account | for notarization | (your Team ID) |
 
 ## Verification
 
