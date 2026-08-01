@@ -124,8 +124,9 @@ jobs:
             exit 1
           fi
           echo "Inspecting $APP_PATH"
-          codesign -dv --verbose=4 "$APP_PATH" 2>&1 || true
-          if codesign -dv "$APP_PATH" 2>&1 | grep -q 'Authority=Developer ID'; then
+          SIG_OUTPUT=$(codesign -dv "$APP_PATH" 2>&1 || true)
+          echo "$SIG_OUTPUT"
+          if echo "$SIG_OUTPUT" | grep -q 'Authority=Developer ID'; then
             codesign --verify --deep --strict --verbose=4 "$APP_PATH"
             echo "--- spctl assessment (notarization) ---"
             spctl -a -vvv --type execute "$APP_PATH" || true
