@@ -17,8 +17,15 @@ this repository.**
   certificates and notarization credentials from secrets. When the secrets are
   absent, the build degrades gracefully to an **unsigned** build (notarization
   is skipped with a warning).
+- The workflow additionally notarizes and staples the DMG explicitly, because
+  electron-builder's notarize integration covers the `.app` and `.pkg` but not
+  the DMG container.
 - Without a valid identity in the keychain or `CSC_LINK`, local builds remain
   unsigned and emit the expected "missing Developer ID certificate" warning.
+- Verified locally (arm64, 0.1.22): the `.app` is signed with Developer ID
+  Application, the `.pkg` with Developer ID Installer; all three artifacts
+  (`.app`, `.pkg`, `.dmg`) are notarized and stapled; `spctl` reports
+  `accepted` / `source=Notarized Developer ID`.
 - `appId` is `se.jbitlabs.gitlab-status-monitor`.
 - The app is packaged with ASAR enabled and uses a custom icon set.
 
@@ -70,15 +77,15 @@ and is unrelated to the macOS App Sandbox entitlement, which is **not** enabled.
 Add these secrets to the GitHub repository (Settings -> Secrets and variables ->
 Actions):
 
-| Secret | Purpose | Required |
-| ------ | ------- | -------- |
-| `CSC_LINK` | Base64 `.p12` of the Developer ID Application cert | for signed .app |
-| `CSC_KEY_PASSWORD` | Password for `CSC_LINK` | for signed .app |
-| `CSC_INSTALLER_LINK` | Base64 `.p12` of the Developer ID Installer cert | for signed .pkg |
-| `CSC_INSTALLER_KEY_PASSWORD` | Password for `CSC_INSTALLER_LINK` | for signed .pkg |
-| `APPLE_ID` | Apple ID used for notarization | for notarization |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` | for notarization |
-| `APPLE_TEAM_ID` | Team ID of the Apple Developer account | for notarization |
+| Secret | Purpose | Required | Value |
+| ------ | ------- | -------- | ------ |
+| `CSC_LINK` | Base64 `.p12` of the Developer ID Application cert | for signed .app | |
+| `CSC_KEY_PASSWORD` | Password for `CSC_LINK` | for signed .app | |
+| `CSC_INSTALLER_LINK` | Base64 `.p12` of the Developer ID Installer cert | for signed .pkg | |
+| `CSC_INSTALLER_KEY_PASSWORD` | Password for `CSC_INSTALLER_LINK` | for signed .pkg | |
+| `APPLE_ID` | Apple ID used for notarization | for notarization | jimmyahs@gmail.com |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` | for notarization | `<redacted>` |
+| `APPLE_TEAM_ID` | Team ID of the Apple Developer account | for notarization | `97FLAA5Y8G` |
 
 ## Verification
 
